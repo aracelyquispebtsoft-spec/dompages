@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Explorador Interactivo del DOM — HTML5</title>
+<style>
+:root {
+    --bg-main: #eef1f6;
+    --bg-card: #ffffff;
+    --bg-soft: #f7f9fc;
+    --text-main: #2b3a4a;
+    --text-muted: #8a97a6;
+    --border-color: #e1e6ee;
+    --accent: #4a6fa5;
+
+    --color-html: #4a6fa5;
+    --color-meta: #8a96a8;
+    --color-body: #1aa86f;
+    --color-struct: #3498db;
+    --color-group: #9b59b6;
+    --color-leaf: #16a99a;
+    --color-form: #e67e22;
+    --color-text-leaf: #5a6577;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+html, body { height: 100%; }
+
+body {
+    background: var(--bg-main);
+    color: var(--text-main);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 18px;
+    overflow: hidden;
+}
+
+/* ---------- HEADER ---------- */
+.main-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex: none;
+}
+.main-header .logo {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex: none;
+}
+.main-header h1 { font-size: 20px; font-weight: 700; color: #1e2b3a; line-height: 1.1; }
+.main-header p { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
+
+/* ---------- WORKSPACE (fills remaining height) ---------- */
+.workspace {
+    display: flex;
+    gap: 16px;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(30,43,58,0.06);
+    min-height: 0;
+}
+.panel.code-panel { flex: 0 1 300px; }
+.panel.tree-panel { flex: 1 1 auto; }
+
+.panel-header {
+    background: var(--bg-soft);
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex: none;
+}
+.panel-header .dot { display: inline-flex; align-items: center; gap: 6px; }
+.panel-header .dot::before { content:''; width:8px; height:8px; border-radius:50%; background: var(--accent); }
+.tree-panel .panel-header .dot::before { background: var(--color-body); }
+
+.panel-content { padding: 14px 16px; flex: 1 1 auto; overflow: auto; min-height: 0; }
+
+/* ---------- CODE ---------- */
+pre { font-family: 'Consolas','Courier New',monospace; font-size: 13px; line-height: 1.5; color: #34465a; }
+.code-line { display: block; padding: 1px 8px; border-radius: 5px; transition: all 0.25s ease; opacity: 0.18; }
+.code-line.visible { opacity: 1; }
+.code-line.highlight { background: #fff6da; box-shadow: inset 3px 0 0 #f1c40f; font-weight: 700; opacity: 1; }
+.indent-1 { padding-left: 20px; } .indent-2 { padding-left: 38px; }
+.indent-3 { padding-left: 56px; } .indent-4 { padding-left: 74px; }
+
+/* ---------- TREE ---------- */
+.tree-container { display: flex; flex-direction: column; align-items: center; width: 100%; min-width: 620px; padding-top: 6px; }
+
+.dom-node {
+    display: flex; flex-direction: column; align-items: center;
+    background: #f8f9fa; border: 2px solid #bdc3c7;
+    border-radius: 9px; padding: 5px 12px; min-width: 80px;
+    text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1), opacity 0.35s ease;
+    transform: scale(0); opacity: 0; margin: 4px 0; z-index: 2;
+}
+.dom-node.active { transform: scale(1); opacity: 1; }
+.dom-node.last-added { animation: pulse-glow 1s infinite alternate; box-shadow: 0 0 0 3px rgba(74,111,165,0.25), 0 4px 10px rgba(0,0,0,0.12); }
+@keyframes pulse-glow { from { transform: scale(1); } to { transform: scale(1.05); } }
+
+.dom-node .tag-name { font-family: 'Consolas',monospace; font-weight: 700; font-size: 13px; }
+.dom-node .node-relation { font-size: 9.5px; color: rgba(255,255,255,0.92); margin-top: 1px; font-weight: 500; }
+
+.node-html { background: var(--color-html); border-color: #3a5885; color: #fff; }
+.node-head { background: var(--color-meta); border-color: #6f7c8c; color: #fff; }
+.node-body { background: var(--color-body); border-color: #148a5b; color: #fff; }
+.node-header, .node-main { background: var(--color-struct); border-color: #2980b9; color: #fff; }
+.node-nav, .node-section { background: var(--color-group); border-color: #8e44ad; color: #fff; }
+.node-form { background: var(--color-form); border-color: #ca6a17; color: #fff; }
+.node-title, .node-h1, .node-h2, .node-label { background: var(--color-text-leaf); border-color: #475264; color: #fff; }
+.node-a, .node-audio, .node-li, .node-input, .node-button { background: var(--color-leaf); border-color: #12897d; color: #fff; }
+
+.dom-row { display: flex; justify-content: center; gap: 14px; width: 100%; }
+.dom-branch { display: flex; flex-direction: column; align-items: center; position: relative; }
+
+.connector { width: 2px; height: 14px; background: #c4ccd6; margin: 1px 0; opacity: 0; transition: opacity 0.3s; }
+.connector.active { opacity: 1; }
+
+/* ---------- EXPLANATION ---------- */
+.explanation-card {
+    background: #edf4fb; border: 1px solid #d4e4f2;
+    border-left: 4px solid var(--accent); border-radius: 0 12px 12px 0;
+    padding: 10px 18px; margin-top: 12px; flex: none;
+    min-height: 64px; display: flex; flex-direction: column; justify-content: center;
+}
+.explanation-card h3 { font-size: 12px; color: var(--color-html); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.explanation-card p { font-size: 13.5px; line-height: 1.45; color: #2c3e50; }
+.explanation-card code { background: #dce8f5; padding: 1px 5px; border-radius: 4px; font-family: 'Consolas',monospace; font-size: 12.5px; color: #2c4d72; }
+
+/* ---------- CONTROLS ---------- */
+.controls {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 12px; background: var(--bg-card);
+    padding: 10px 16px; border-radius: 12px; border: 1px solid var(--border-color);
+    flex: none; box-shadow: 0 -2px 10px rgba(30,43,58,0.04); gap: 12px;
+}
+.controls-left, .btn-group { display: flex; gap: 10px; align-items: center; }
+
+.progress-wrap { display: flex; align-items: center; gap: 10px; }
+.progress-track { width: 120px; height: 6px; background: #e1e6ee; border-radius: 3px; overflow: hidden; }
+.progress-bar { height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.35s ease; }
+
+button {
+    background: #fff; color: #2c3e50; border: 1px solid #d4dae2;
+    padding: 8px 15px; font-size: 13.5px; font-weight: 600;
+    border-radius: 8px; cursor: pointer; transition: all 0.18s ease;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+button:hover:not(:disabled) { background: var(--bg-soft); border-color: #aab4c0; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.btn-primary { background: var(--accent); color: #fff; border-color: #3a5885; }
+button.btn-primary:hover:not(:disabled) { background: #3b5984; }
+
+.step-counter { font-size: 12.5px; font-weight: 700; color: #57606f; background: #eef1f6; padding: 5px 14px; border-radius: 14px; }
+
+@media (max-height: 680px) {
+    .dom-node { padding: 3px 10px; }
+    .dom-node .node-relation { display: none; }
+    .main-header p { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="main-header">
+    <div class="logo">&#9783;</div>
+    <div>
+        <h1>Explorador interactivo del DOM</h1>
+        <p>Cómo el navegador convierte tu HTML en un árbol de nodos: padre, hijo y hermano.</p>
+    </div>
+</div>
+
+<div class="workspace">
+    <!-- CÓDIGO -->
+    <div class="panel code-panel">
+        <div class="panel-header">
+            <span class="dot">Tu código HTML</span>
+            <span style="font-family:monospace; color: var(--color-html);">&lt;/&gt;</span>
+        </div>
+        <div class="panel-content">
+            <pre><span class="code-line" id="l-html-o">&lt;html&gt;</span>
+<span class="code-line indent-1" id="l-head-o">  &lt;head&gt;</span>
+<span class="code-line indent-2" id="l-title">    &lt;title&gt;Mi sitio&lt;/title&gt;</span>
+<span class="code-line indent-1" id="l-head-c">  &lt;/head&gt;</span>
+<span class="code-line indent-1" id="l-body-o">  &lt;body&gt;</span>
+<span class="code-line indent-2" id="l-header-o">    &lt;header&gt;</span>
+<span class="code-line indent-3" id="l-h1">      &lt;h1&gt;Mi sitio&lt;/h1&gt;</span>
+<span class="code-line indent-3" id="l-nav-o">      &lt;nav&gt;</span>
+<span class="code-line indent-4" id="l-a1">        &lt;a&gt;Inicio&lt;/a&gt;</span>
+<span class="code-line indent-4" id="l-a2">        &lt;a&gt;Contacto&lt;/a&gt;</span>
+<span class="code-line indent-3" id="l-nav-c">      &lt;/nav&gt;</span>
+<span class="code-line indent-2" id="l-header-c">    &lt;/header&gt;</span>
+<span class="code-line indent-2" id="l-main-o">    &lt;main&gt;</span>
+<span class="code-line indent-3" id="l-section-o">      &lt;section&gt;</span>
+<span class="code-line indent-4" id="l-h2">        &lt;h2&gt;Bienvenidos&lt;/h2&gt;</span>
+<span class="code-line indent-4" id="l-audio">        &lt;audio&gt;&lt;/audio&gt;</span>
+<span class="code-line indent-3" id="l-section-c">      &lt;/section&gt;</span>
+<span class="code-line indent-3" id="l-ul-o">      &lt;ul&gt;</span>
+<span class="code-line indent-4" id="l-li1">        &lt;li&gt;Uno&lt;/li&gt;</span>
+<span class="code-line indent-4" id="l-li2">        &lt;li&gt;Dos&lt;/li&gt;</span>
+<span class="code-line indent-3" id="l-ul-c">      &lt;/ul&gt;</span>
+<span class="code-line indent-2" id="l-main-c">    &lt;/main&gt;</span>
+<span class="code-line indent-2" id="l-form-o">    &lt;form&gt;</span>
+<span class="code-line indent-3" id="l-label">      &lt;label&gt;Nombre&lt;/label&gt;</span>
+<span class="code-line indent-3" id="l-input">      &lt;input&gt;</span>
+<span class="code-line indent-3" id="l-button">      &lt;button&gt;Enviar&lt;/button&gt;</span>
+<span class="code-line indent-2" id="l-form-c">    &lt;/form&gt;</span>
+<span class="code-line indent-1" id="l-body-c">  &lt;/body&gt;</span>
+<span class="code-line" id="l-html-c">&lt;/html&gt;</span></pre>
+        </div>
+    </div>
+
+    <!-- ÁRBOL -->
+    <div class="panel tree-panel">
+        <div class="panel-header">
+            <span class="dot">Estructura jerárquica viva</span>
+            <span style="font-size:11px; color: var(--color-body);">Vista del árbol</span>
+        </div>
+        <div class="panel-content">
+            <div class="tree-container">
+
+                <div class="dom-node node-html" id="n-html">
+                    <span class="tag-name">html</span><span class="node-relation">Raíz</span>
+                </div>
+                <div class="connector" id="arr-html"></div>
+
+                <div class="dom-row">
+                    <!-- head -->
+                    <div class="dom-branch">
+                        <div class="dom-node node-head" id="n-head">
+                            <span class="tag-name">head</span><span class="node-relation">Hijo de html</span>
+                        </div>
+                        <div class="connector" id="arr-head"></div>
+                        <div class="dom-node node-title" id="n-title">
+                            <span class="tag-name">title</span><span class="node-relation">Hijo de head</span>
+                        </div>
+                    </div>
+
+                    <!-- body -->
+                    <div class="dom-branch">
+                        <div class="dom-node node-body" id="n-body">
+                            <span class="tag-name">body</span><span class="node-relation">Hijo de html</span>
+                        </div>
+                        <div class="connector" id="arr-body"></div>
+
+                        <div class="dom-row">
+                            <!-- header -->
+                            <div class="dom-branch">
+                                <div class="dom-node node-header" id="n-header">
+                                    <span class="tag-name">header</span><span class="node-relation">Hijo de body</span>
+                                </div>
+                                <div class="connector" id="arr-header"></div>
+                                <div class="dom-row">
+                                    <div class="dom-branch">
+                                        <div class="dom-node node-h1" id="n-h1">
+                                            <span class="tag-name">h1</span><span class="node-relation">Hijo de header</span>
+                                        </div>
+                                    </div>
+                                    <div class="dom-branch">
+                                        <div class="dom-node node-nav" id="n-nav">
+                                            <span class="tag-name">nav</span><span class="node-relation">Hermano de h1</span>
+                                        </div>
+                                        <div class="connector" id="arr-nav"></div>
+                                        <div class="dom-row">
+                                            <div class="dom-node node-a" id="n-a1"><span class="tag-name">a</span></div>
+                                            <div class="dom-node node-a" id="n-a2"><span class="tag-name">a</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- main -->
+                            <div class="dom-branch">
+                                <div class="dom-node node-main" id="n-main">
+                                    <span class="tag-name">main</span><span class="node-relation">Hermano de header</span>
+                                </div>
+                                <div class="connector" id="arr-main"></div>
+                                <div class="dom-row">
+                                    <div class="dom-branch">
+                                        <div class="dom-node node-section" id="n-section">
+                                            <span class="tag-name">section</span><span class="node-relation">Hijo de main</span>
+                                        </div>
+                                        <div class="connector" id="arr-section"></div>
+                                        <div class="dom-row">
+                                            <div class="dom-node node-h2" id="n-h2"><span class="tag-name">h2</span></div>
+                                            <div class="dom-node node-audio" id="n-audio"><span class="tag-name">audio</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="dom-branch">
+                                        <div class="dom-node node-ul" id="n-ul">
+                                            <span class="tag-name">ul</span><span class="node-relation">Hermano de section</span>
+                                        </div>
+                                        <div class="connector" id="arr-ul"></div>
+                                        <div class="dom-row">
+                                            <div class="dom-node node-li" id="n-li1"><span class="tag-name">li</span></div>
+                                            <div class="dom-node node-li" id="n-li2"><span class="tag-name">li</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- form -->
+                            <div class="dom-branch">
+                                <div class="dom-node node-form" id="n-form">
+                                    <span class="tag-name">form</span><span class="node-relation">Hermano de main</span>
+                                </div>
+                                <div class="connector" id="arr-form"></div>
+                                <div class="dom-row">
+                                    <div class="dom-node node-label" id="n-label"><span class="tag-name">label</span></div>
+                                    <div class="dom-node node-input" id="n-input"><span class="tag-name">input</span></div>
+                                    <div class="dom-node node-button" id="n-button"><span class="tag-name">button</span></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EXPLICACIÓN -->
+<div class="explanation-card">
+    <h3 id="exp-title">Paso inicial</h3>
+    <p id="exp-text">El navegador lee el archivo desde el principio. Presiona "Siguiente paso" o "Autoplay" para ver cómo se construye el árbol.</p>
+</div>
+
+<!-- CONTROLES -->
+<div class="controls">
+    <div class="controls-left">
+        <button id="btn-reset" onclick="goToStep(0)">&#8635; Reiniciar</button>
+        <button id="btn-play" onclick="togglePlay()">&#9654; Autoplay</button>
+    </div>
+    <div class="progress-wrap">
+        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+        <div class="step-counter" id="step-display">0 / 7</div>
+    </div>
+    <div class="btn-group">
+        <button id="btn-prev" onclick="changeStep(-1)" disabled>&#8592; Anterior</button>
+        <button id="btn-next" class="btn-primary" onclick="changeStep(1)">Siguiente paso &#8594;</button>
+    </div>
+</div>
+
+<script>
+let currentStep = 0;
+const totalSteps = 7;
+let playTimer = null;
+
+const stepsData = {
+    0: { title: "Documento preparado",
+        text: 'El navegador lee el archivo desde el principio. Haz clic en "Siguiente" para observar cómo se crea el primer elemento.',
+        lines: [], highlights: [], nodes: [], arrows: [] },
+    1: { title: "1. La raíz del árbol (&lt;html&gt;)",
+        text: 'Se procesa la etiqueta raíz <code>&lt;html&gt;</code>. En el DOM este es el origen de todo (la raíz). No tiene padre.',
+        lines: ['l-html-o','l-html-c'], highlights: ['l-html-o','l-html-c'], nodes: ['n-html'], arrows: [] },
+    2: { title: "2. Los metadatos (&lt;head&gt; y &lt;title&gt;)",
+        text: 'El navegador entra a <code>&lt;head&gt;</code>, un <strong>hijo</strong> de <code>html</code>. A su vez crea a su propio hijo <code>&lt;title&gt;</code>. No se dibujan en la página, pero existen en el DOM.',
+        lines: ['l-html-o','l-html-c','l-head-o','l-title','l-head-c'], highlights: ['l-head-o','l-title','l-head-c'],
+        nodes: ['n-html','n-head','n-title'], arrows: ['arr-html','arr-head'] },
+    3: { title: "3. El cuerpo visible (&lt;body&gt;)",
+        text: '¡Aparece <code>&lt;body&gt;</code>! Otro hijo de <code>html</code>. Como <code>head</code> y <code>body</code> comparten el mismo padre, son <strong>hermanos</strong>.',
+        lines: ['l-html-o','l-html-c','l-head-o','l-title','l-head-c','l-body-o','l-body-c'], highlights: ['l-body-o','l-body-c'],
+        nodes: ['n-html','n-head','n-title','n-body'], arrows: ['arr-html','arr-head'] },
+    4: { title: "4. La cabecera (&lt;header&gt;)",
+        text: 'Dentro del cuerpo, el navegador lee <code>&lt;header&gt;</code> (hijo de body). Despliega sus propios hijos: <code>&lt;h1&gt;</code> y <code>&lt;nav&gt;</code>. Los enlaces <code>&lt;a&gt;</code> son hijos de <code>nav</code> (nietos de header).',
+        lines: ['l-html-o','l-html-c','l-head-o','l-title','l-head-c','l-body-o','l-body-c','l-header-o','l-h1','l-nav-o','l-a1','l-a2','l-nav-c','l-header-c'], highlights: ['l-header-o','l-h1','l-nav-o','l-a1','l-a2','l-nav-c','l-header-c'],
+        nodes: ['n-html','n-head','n-title','n-body','n-header','n-h1','n-nav','n-a1','n-a2'], arrows: ['arr-html','arr-head','arr-body','arr-header','arr-nav'] },
+    5: { title: "5. El bloque principal (&lt;main&gt;)",
+        text: 'Aparece <code>&lt;main&gt;</code> como <strong>hermano</strong> de <code>header</code>. Dentro se procesa una <code>&lt;section&gt;</code> con un <code>&lt;h2&gt;</code> y un <code>&lt;audio&gt;</code>, etiquetas que ya conoces. ¡Mira la profundidad de la rama!',
+        lines: ['l-html-o','l-html-c','l-head-o','l-title','l-head-c','l-body-o','l-body-c','l-header-o','l-h1','l-nav-o','l-a1','l-a2','l-nav-c','l-header-c','l-main-o','l-section-o','l-h2','l-audio','l-section-c','l-main-c'], highlights: ['l-main-o','l-section-o','l-h2','l-audio','l-section-c'],
+        nodes: ['n-html','n-head','n-title','n-body','n-header','n-h1','n-nav','n-a1','n-a2','n-main','n-section','n-h2','n-audio'], arrows: ['arr-html','arr-head','arr-body','arr-header','arr-nav','arr-main','arr-section'] },
+    6: { title: "6. La lista (&lt;ul&gt;)",
+        text: 'Dentro del mismo <code>main</code> se agrega la lista <code>&lt;ul&gt;</code>, <strong>hermana</strong> de la <code>section</code> (comparten el padre <code>main</code>), con dos hijos <code>&lt;li&gt;</code>.',
+        lines: ['l-html-o','l-html-c','l-head-o','l-title','l-head-c','l-body-o','l-body-c','l-header-o','l-h1','l-nav-o','l-a1','l-a2','l-nav-c','l-header-c','l-main-o','l-section-o','l-h2','l-audio','l-section-c','l-ul-o','l-li1','l-li2','l-ul-c','l-main-c'], highlights: ['l-ul-o','l-li1','l-li2','l-ul-c','l-main-c'],
+        nodes: ['n-html','n-head','n-title','n-body','n-header','n-h1','n-nav','n-a1','n-a2','n-main','n-section','n-h2','n-audio','n-ul','n-li1','n-li2'], arrows: ['arr-html','arr-head','arr-body','arr-header','arr-nav','arr-main','arr-section','arr-ul'] },
+    7: { title: "7. El formulario (&lt;form&gt;)",
+        text: 'Al mismo nivel que <code>header</code> y <code>main</code> nace el <code>&lt;form&gt;</code>, tercer hijo de <code>body</code>. Despliega sus ramas finales: <code>&lt;label&gt;</code>, <code>&lt;input&gt;</code> y <code>&lt;button&gt;</code>, todos hermanos entre sí.',
+        lines: ['l-html-o','l-html-c','l-head-o','l-title','l-head-c','l-body-o','l-body-c','l-header-o','l-h1','l-nav-o','l-a1','l-a2','l-nav-c','l-header-c','l-main-o','l-section-o','l-h2','l-audio','l-section-c','l-ul-o','l-li1','l-li2','l-ul-c','l-main-c','l-form-o','l-label','l-input','l-button','l-form-c'], highlights: ['l-form-o','l-label','l-input','l-button','l-form-c'],
+        nodes: ['n-html','n-head','n-title','n-body','n-header','n-h1','n-nav','n-a1','n-a2','n-main','n-section','n-h2','n-audio','n-ul','n-li1','n-li2','n-form','n-label','n-input','n-button'], arrows: ['arr-html','arr-head','arr-body','arr-header','arr-nav','arr-main','arr-section','arr-ul','arr-form'] }
+};
+
+const stepAdditions = {
+    1: ['n-html'], 2: ['n-head','n-title'], 3: ['n-body'],
+    4: ['n-header','n-h1','n-nav','n-a1','n-a2'],
+    5: ['n-main','n-section','n-h2','n-audio'],
+    6: ['n-ul','n-li1','n-li2'],
+    7: ['n-form','n-label','n-input','n-button']
+};
+
+function changeStep(direction) { stopPlay(); goToStep(currentStep + direction); }
+
+function goToStep(stepNumber) {
+    if (stepNumber < 0 || stepNumber > totalSteps) return;
+    currentStep = stepNumber;
+    const data = stepsData[currentStep];
+
+    document.getElementById('step-display').innerText = `${currentStep} / ${totalSteps}`;
+    document.getElementById('progress-bar').style.width = (currentStep / totalSteps * 100) + '%';
+    document.getElementById('exp-title').innerHTML = data.title;
+    document.getElementById('exp-text').innerHTML = data.text;
+
+    document.querySelectorAll('.code-line').forEach(line => {
+        line.classList.remove('visible','highlight');
+        if (data.lines.includes(line.id)) line.classList.add('visible');
+        if (data.highlights.includes(line.id)) line.classList.add('highlight');
+    });
+
+    document.querySelectorAll('.dom-node').forEach(node => {
+        node.classList.remove('active','last-added');
+        if (data.nodes.includes(node.id)) node.classList.add('active');
+    });
+
+    if (currentStep > 0 && stepAdditions[currentStep]) {
+        stepAdditions[currentStep].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('last-added');
+        });
+    }
+
+    document.querySelectorAll('.connector').forEach(arr => {
+        arr.classList.toggle('active', data.arrows.includes(arr.id));
+    });
+
+    document.getElementById('btn-prev').disabled = (currentStep === 0);
+    document.getElementById('btn-next').disabled = (currentStep === totalSteps);
+}
+
+function togglePlay() {
+    if (playTimer) { stopPlay(); return; }
+    if (currentStep >= totalSteps) goToStep(0);
+    setPlayLabel(true);
+    playTimer = setInterval(() => {
+        if (currentStep >= totalSteps) { stopPlay(); return; }
+        goToStep(currentStep + 1);
+    }, 1600);
+}
+function stopPlay() { if (playTimer) { clearInterval(playTimer); playTimer = null; } setPlayLabel(false); }
+function setPlayLabel(playing) {
+    document.getElementById('btn-play').innerHTML = playing ? '&#10073;&#10073; Pausar' : '&#9654; Autoplay';
+}
+
+goToStep(0);
+</script>
+</body>
+</html>
